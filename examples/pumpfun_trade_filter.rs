@@ -105,7 +105,6 @@ async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
     let mut sell_count = 0u64;
     let mut buy_exact_count = 0u64;
     let mut create_count = 0u64;
-    let mut total_latency_us = 0i64;
 
     // High-performance event consumer
     tokio::spawn(async move {
@@ -123,8 +122,6 @@ async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
                     DexEvent::PumpFunBuy(e) => {
                         buy_count += 1;
                         let latency_us = now_us - e.metadata.grpc_recv_us;
-                        total_latency_us += latency_us;
-
                         println!("┌─────────────────────────────────────────────────────────────");
                         println!("│ 🟢 PumpFun BUY #{}", event_count);
                         println!("├─────────────────────────────────────────────────────────────");
@@ -145,8 +142,6 @@ async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
                     DexEvent::PumpFunSell(e) => {
                         sell_count += 1;
                         let latency_us = now_us - e.metadata.grpc_recv_us;
-                        total_latency_us += latency_us;
-
                         println!("┌─────────────────────────────────────────────────────────────");
                         println!("│ 🔴 PumpFun SELL #{}", event_count);
                         println!("├─────────────────────────────────────────────────────────────");
@@ -167,8 +162,6 @@ async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
                     DexEvent::PumpFunBuyExactSolIn(e) => {
                         buy_exact_count += 1;
                         let latency_us = now_us - e.metadata.grpc_recv_us;
-                        total_latency_us += latency_us;
-
                         println!("┌─────────────────────────────────────────────────────────────");
                         println!("│ 🟡 PumpFun BUY_EXACT_SOL_IN #{}", event_count);
                         println!("├─────────────────────────────────────────────────────────────");
@@ -188,9 +181,7 @@ async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
 
                     DexEvent::PumpFunTrade(e) => {
                         // Fallback for unknown trade types
-                        let latency_us = now_us - e.metadata.grpc_recv_us;
-                        total_latency_us += latency_us;
-
+                        let _latency_us = now_us - e.metadata.grpc_recv_us;
                         println!("┌─────────────────────────────────────────────────────────────");
                         println!("│ ⚪ PumpFun TRADE (unknown type) #{}", event_count);
                         println!("├─────────────────────────────────────────────────────────────");
@@ -202,8 +193,6 @@ async fn run_example() -> Result<(), Box<dyn std::error::Error>> {
                     DexEvent::PumpFunCreate(e) => {
                         create_count += 1;
                         let latency_us = now_us - e.metadata.grpc_recv_us;
-                        total_latency_us += latency_us;
-
                         println!("┌─────────────────────────────────────────────────────────────");
                         println!("│ 🆕 PumpFun CREATE #{}", event_count);
                         println!("├─────────────────────────────────────────────────────────────");

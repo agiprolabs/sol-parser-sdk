@@ -8,7 +8,6 @@ use solana_client::rpc_config::RpcTransactionConfig;
 use solana_sdk::signature::Signature;
 use solana_transaction_status::UiTransactionEncoding;
 use std::str::FromStr;
-use base64::Engine as _;
 
 fn main() {
     let tx_sig = "3zsihbygW7hoKGtduAyDDFzp4E1eis8gaBzEzzNKr8ma39baffpFcphok9wHFgR3EauDe9vYYsVf4Puh5pZ6UJiS";
