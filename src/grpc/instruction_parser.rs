@@ -45,6 +45,9 @@ pub fn parse_instructions_enhanced(
         return Vec::new();
     }
 
+    // 与 log 解析一致：同笔交易内若有 PumpFun create，则本 tx 的 buy 事件标记为 is_created_buy（创建者首次买入）
+    let is_created_buy = crate::logs::optimized_matcher::detect_pumpfun_create(&meta.log_messages);
+
     // 构建账户查找表
     let keys_len = msg.account_keys.len();
     let writable_len = meta.loaded_writable_addresses.len();
@@ -80,6 +83,7 @@ pub fn parse_instructions_enhanced(
             &ix.accounts,
             &get_key,
             filter,
+            is_created_buy,
         ) {
             result.push((i, None, event)); // (outer_idx, inner_idx, event)
         }
@@ -105,6 +109,7 @@ pub fn parse_instructions_enhanced(
                 block_us,
                 grpc_us,
                 filter,
+                is_created_buy,
             ) {
                 result.push((outer_idx, Some(j), event)); // (outer_idx, Some(inner_idx), event)
             }
@@ -155,6 +160,7 @@ fn parse_outer_instruction<'a>(
     account_indices: &[u8],
     get_key: &dyn Fn(usize) -> Option<&'a Vec<u8>>,
     filter: Option<&EventTypeFilter>,
+    _is_created_buy: bool,
 ) -> Option<DexEvent> {
     // 检查指令数据长度（至少8字节 discriminator）
     if data.len() < 8 {
@@ -194,6 +200,7 @@ fn parse_inner_instruction(
     block_us: Option<i64>,
     grpc_us: i64,
     filter: Option<&EventTypeFilter>,
+    is_created_buy: bool,
 ) -> Option<DexEvent> {
     // 检查数据长度（至少16字节 discriminator）
     if data.len() < 16 {
@@ -222,7 +229,7 @@ fn parse_inner_instruction(
                 return None;
             }
         }
-        pump_inner::parse_pumpfun_inner_instruction(&discriminator, inner_data, metadata)
+        pump_inner::parse_pumpfun_inner_instruction(&discriminator, inner_data, metadata, is_created_buy)
     } else if *program_id == program_ids::PUMPSWAP_PROGRAM_ID {
         if let Some(f) = filter {
             if !f.includes_pumpswap() {

@@ -127,14 +127,18 @@ unsafe fn read_u32_unchecked(data: &[u8], offset: usize) -> u32 {
 ///
 /// # 返回
 /// 解析成功返回 `Some(DexEvent)`，否则返回 `None`
+///
+/// # is_created_buy
+/// 当同笔交易内存在 PumpFun create 时由外层传入 true，表示创建者首次买入，与 log 解析行为一致
 #[inline]
 pub fn parse_pumpfun_inner_instruction(
     discriminator: &[u8; 16],
     data: &[u8],
     metadata: EventMetadata,
+    is_created_buy: bool,
 ) -> Option<DexEvent> {
     match discriminator {
-        &discriminators::TRADE_EVENT => parse_trade_event_inner(data, metadata),
+        &discriminators::TRADE_EVENT => parse_trade_event_inner(data, metadata, is_created_buy),
         &discriminators::CREATE_TOKEN_EVENT => parse_create_event_inner(data, metadata),
         &discriminators::COMPLETE_PUMP_AMM_MIGRATION_EVENT => parse_migrate_event_inner(data, metadata),
         _ => None,
@@ -149,15 +153,15 @@ pub fn parse_pumpfun_inner_instruction(
 ///
 /// 根据编译时的 feature flag 自动选择解析器实现
 #[inline(always)]
-fn parse_trade_event_inner(data: &[u8], metadata: EventMetadata) -> Option<DexEvent> {
+fn parse_trade_event_inner(data: &[u8], metadata: EventMetadata, is_created_buy: bool) -> Option<DexEvent> {
     #[cfg(feature = "parse-borsh")]
     {
-        parse_trade_event_inner_borsh(data, metadata)
+        parse_trade_event_inner_borsh(data, metadata, is_created_buy)
     }
 
     #[cfg(feature = "parse-zero-copy")]
     {
-        parse_trade_event_inner_zero_copy(data, metadata)
+        parse_trade_event_inner_zero_copy(data, metadata, is_created_buy)
     }
 }
 
@@ -166,11 +170,12 @@ fn parse_trade_event_inner(data: &[u8], metadata: EventMetadata) -> Option<DexEv
 /// **优点**: 类型安全、代码简洁、自动验证
 #[cfg(feature = "parse-borsh")]
 #[inline(always)]
-fn parse_trade_event_inner_borsh(data: &[u8], metadata: EventMetadata) -> Option<DexEvent> {
+fn parse_trade_event_inner_borsh(data: &[u8], metadata: EventMetadata, is_created_buy: bool) -> Option<DexEvent> {
     // PumpFun TradeEvent 不是固定大小，因为包含 String 字段
     // 我们需要解析整个数据
     let mut event = borsh::from_slice::<PumpFunTradeEvent>(data).ok()?;
     event.metadata = metadata;
+    event.is_created_buy = is_created_buy;
 
     // 根据 ix_name 返回不同的事件类型
     match event.ix_name.as_str() {
@@ -186,7 +191,7 @@ fn parse_trade_event_inner_borsh(data: &[u8], metadata: EventMetadata) -> Option
 /// **优点**: 最快、零拷贝、无验证开销
 #[cfg(feature = "parse-zero-copy")]
 #[inline(always)]
-fn parse_trade_event_inner_zero_copy(data: &[u8], metadata: EventMetadata) -> Option<DexEvent> {
+fn parse_trade_event_inner_zero_copy(data: &[u8], metadata: EventMetadata, is_created_buy: bool) -> Option<DexEvent> {
     unsafe {
         // 快速边界检查
         if data.len() < 32 + 8 + 8 + 1 + 32 + 8 + 8 + 8 + 8 + 8 + 32 + 8 + 8 + 32 + 8 + 8 {
@@ -309,14 +314,14 @@ fn parse_trade_event_inner_zero_copy(data: &[u8], metadata: EventMetadata) -> Op
             0
         };
 
-        // Inner instruction 只包含日志数据，不含指令上下文账户
+        // Inner instruction 只包含日志数据，不含指令上下文账户；is_created_buy 由外层根据同 tx 是否含 create 传入
         let trade_event = PumpFunTradeEvent {
             metadata,
             mint,
             sol_amount,
             token_amount,
             is_buy,
-            is_created_buy: false, // 这个由外层检测设置
+            is_created_buy,
             user,
             timestamp,
             virtual_sol_reserves,

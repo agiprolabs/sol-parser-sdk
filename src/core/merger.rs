@@ -132,6 +132,7 @@ fn merge_pumpfun_trade(base: &mut PumpFunTradeEvent, inner: PumpFunTradeEvent) {
     base.current_sol_volume = inner.current_sol_volume;
     base.last_update_timestamp = inner.last_update_timestamp;
     base.ix_name = inner.ix_name;
+    base.is_created_buy = inner.is_created_buy;
 
     // 保留 base 的账户上下文字段（bonding_curve, associated_bonding_curve 等）
     // 这些字段来自 instruction，不被 inner instruction 覆盖
