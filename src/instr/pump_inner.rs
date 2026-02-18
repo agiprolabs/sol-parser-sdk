@@ -176,6 +176,7 @@ fn parse_trade_event_inner_borsh(data: &[u8], metadata: EventMetadata, is_create
     let mut event = borsh::from_slice::<PumpFunTradeEvent>(data).ok()?;
     event.metadata = metadata;
     event.is_created_buy = is_created_buy;
+    event.is_cashback_coin = event.cashback_fee_basis_points > 0;
 
     // 根据 ix_name 返回不同的事件类型
     match event.ix_name.as_str() {
@@ -343,6 +344,7 @@ fn parse_trade_event_inner_zero_copy(data: &[u8], metadata: EventMetadata, is_cr
             mayhem_mode,
             cashback_fee_basis_points,
             cashback,
+            is_cashback_coin: cashback_fee_basis_points > 0,
             ..Default::default() // 其他账户字段由 instruction 提供
         };
 

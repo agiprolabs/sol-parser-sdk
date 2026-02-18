@@ -120,6 +120,9 @@ pub struct PumpFunTradeEvent {
     pub cashback_fee_basis_points: u64,
     /// Cashback amount (PUMP_CASHBACK_README)
     pub cashback: u64,
+    /// 是否返现代币（由 cashback_fee_basis_points > 0 推导，供 sol-trade-sdk 等构造 sell 指令用）
+    #[borsh(skip)]
+    pub is_cashback_coin: bool,
 
     // === Instruction parameter fields (reserved for future use, DO NOT delete) ===
     // pub amount: u64,                     // buy/sell.args.amount
