@@ -593,7 +593,7 @@ mod tests {
         };
 
         let short_data = vec![0u8; 10];
-        let result = parse_trade_event_inner(&short_data, metadata);
+        let result = parse_trade_event_inner(&short_data, metadata, false);
         assert!(result.is_none());
     }
 }
