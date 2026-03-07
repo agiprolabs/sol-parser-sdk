@@ -11,6 +11,7 @@ use crate::instr::read_pubkey_fast;
 use solana_sdk::pubkey::Pubkey;
 use solana_sdk::signature::Signature;
 use std::collections::HashMap;
+use std::sync::Arc;
 use yellowstone_grpc_proto::prelude::{Transaction, TransactionStatusMeta};
 
 /// 解析交易中的所有指令事件（instruction + inner instruction）
@@ -39,6 +40,12 @@ pub fn parse_instructions_enhanced(
 ) -> Vec<DexEvent> {
     let Some(tx) = transaction else { return Vec::new() };
     let Some(msg) = &tx.message else { return Vec::new() };
+
+    let recent_blockhash = if msg.recent_blockhash.is_empty() {
+        None
+    } else {
+        Some(Arc::new(msg.recent_blockhash.clone()))
+    };
 
     // 提前检查：是否需要解析 instruction（根据 filter）
     if !should_parse_instructions(filter) {
@@ -117,7 +124,13 @@ pub fn parse_instructions_enhanced(
     }
 
     // 步骤 3: 合并相关事件（instruction + inner instruction）
-    let merged = merge_instruction_events(result);
+    let mut merged = merge_instruction_events(result);
+
+    for e in merged.iter_mut() {
+        if let Some(m) = e.metadata_mut() {
+            m.recent_blockhash = recent_blockhash.clone(); // Arc clone: no allocation
+        }
+    }
 
     // 步骤 3.5: 转换 invokes HashMap 为字符串键（用于 fill_data）
     let invokes_str: HashMap<&str, Vec<(i32, i32)>> = invokes
@@ -213,6 +226,7 @@ fn parse_inner_instruction(
         tx_index: tx_idx,
         block_time_us: block_us.unwrap_or(0),
         grpc_recv_us: grpc_us,
+        recent_blockhash: None, // set later on merged events in parse_instructions_enhanced
     };
 
     // 提取 16 字节 discriminator
@@ -381,6 +395,7 @@ mod tests {
             tx_index: 1,
             block_time_us: 1000,
             grpc_recv_us: 2000,
+            recent_blockhash: None,
         };
 
         // 模拟：outer instruction + inner instruction（应该合并）

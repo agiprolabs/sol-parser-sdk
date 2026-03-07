@@ -233,6 +233,7 @@ mod tests {
             tx_index: 1,
             block_time_us: 1000,
             grpc_recv_us: 2000,
+            recent_blockhash: None,
         };
 
         // Base event 来自 instruction（包含账户上下文）
@@ -278,6 +279,7 @@ mod tests {
             tx_index: 1,
             block_time_us: 1000,
             grpc_recv_us: 2000,
+            recent_blockhash: None,
         };
 
         let base = DexEvent::PumpFunTrade(PumpFunTradeEvent {

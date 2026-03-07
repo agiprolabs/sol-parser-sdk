@@ -323,6 +323,7 @@ fn parse_buy_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         Some(DexEvent::PumpSwapBuy(PumpSwapBuyEvent {
@@ -416,6 +417,7 @@ fn parse_sell_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         Some(DexEvent::PumpSwapSell(PumpSwapSellEvent {
@@ -500,6 +502,7 @@ fn parse_create_pool_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         Some(DexEvent::PumpSwapCreatePool(PumpSwapCreatePoolEvent {
@@ -569,6 +572,7 @@ fn parse_add_liquidity_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         Some(DexEvent::PumpSwapLiquidityAdded(PumpSwapLiquidityAdded {
@@ -633,6 +637,7 @@ fn parse_remove_liquidity_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         Some(DexEvent::PumpSwapLiquidityRemoved(PumpSwapLiquidityRemoved {

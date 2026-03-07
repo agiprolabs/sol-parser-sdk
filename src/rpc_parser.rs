@@ -96,6 +96,17 @@ pub fn parse_rpc_transaction(
     // Wrap grpc_tx in Option for reuse
     let grpc_tx_opt = Some(grpc_tx);
 
+    let recent_blockhash = grpc_tx_opt
+        .as_ref()
+        .and_then(|t| t.message.as_ref())
+        .and_then(|m| {
+            if m.recent_blockhash.is_empty() {
+                None
+            } else {
+                Some(m.recent_blockhash.clone())
+            }
+        });
+
     // Build program_invokes HashMap for account filling
     // Use string keys to match gRPC parsing logic
     let mut program_invokes: HashMap<&str, Vec<(i32, i32)>> = HashMap::new();
@@ -163,6 +174,7 @@ pub fn parse_rpc_transaction(
             grpc_recv_us,
             filter,
             is_created_buy,
+            recent_blockhash.as_deref(),
         ) {
             // Check if this is a PumpFun create event to set is_created_buy flag
             if matches!(event, DexEvent::PumpFunCreate(_) | DexEvent::PumpFunCreateV2(_)) {

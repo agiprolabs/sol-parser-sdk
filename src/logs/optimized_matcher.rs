@@ -244,6 +244,7 @@ mod discriminators {
 /// Old: extract_discriminator(decode) -> parser(decode again) = 2x decode
 /// New: decode once -> check filter -> parse from buffer = 1x decode
 #[inline(always)]
+/// `recent_blockhash`: pass as `Option<&[u8]>`; only cloned when an event is built (low latency).
 pub fn parse_log_optimized(
     log: &str,
     signature: Signature,
@@ -253,6 +254,7 @@ pub fn parse_log_optimized(
     grpc_recv_us: i64,
     event_type_filter: Option<&EventTypeFilter>,
     is_created_buy: bool,
+    recent_blockhash: Option<&[u8]>,
 ) -> Option<DexEvent> {
     // Step 1: Find "Program data: " prefix using SIMD
     let log_bytes = log.as_bytes();
@@ -329,6 +331,7 @@ pub fn parse_log_optimized(
         tx_index,
         block_time_us: block_time_us.unwrap_or(0),
         grpc_recv_us,
+        recent_blockhash: recent_blockhash.map(|s| std::sync::Arc::new(s.to_vec())),
     };
 
     // ========================================================================

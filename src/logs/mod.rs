@@ -49,6 +49,7 @@ use crate::core::clock::now_us;
 
 /// 主日志解析入口函数
 #[inline(always)]  // 零延迟优化：内联热路径
+/// `recent_blockhash`: pass as `Some(&buf)` so it is only cloned when an event is produced (not per log line).
 pub fn parse_log(
     log: &str,
     signature: Signature,
@@ -58,6 +59,7 @@ pub fn parse_log(
     grpc_recv_us: i64,
     event_type_filter: Option<&crate::grpc::types::EventTypeFilter>,
     is_created_buy: bool,
+    recent_blockhash: Option<&[u8]>,
 ) -> Option<DexEvent> {
     optimized_matcher::parse_log_optimized(
         log,
@@ -68,6 +70,7 @@ pub fn parse_log(
         grpc_recv_us,
         event_type_filter,
         is_created_buy,
+        recent_blockhash,
     )
 }
 
@@ -89,5 +92,6 @@ pub fn parse_log_unified(
         grpc_recv_us,
         None,
         false,
+        None,
     )
 }

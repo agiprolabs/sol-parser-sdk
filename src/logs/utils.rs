@@ -165,6 +165,7 @@ pub fn create_metadata_simple(
         tx_index,
         block_time_us: block_time_us.unwrap_or(0),
         grpc_recv_us,
+        recent_blockhash: None,
     }
 }
 
@@ -182,6 +183,7 @@ pub fn create_metadata_default(
         tx_index,
         block_time_us: block_time_us.unwrap_or(0),
         grpc_recv_us: current_time,
+        recent_blockhash: None,
     }
 }
 

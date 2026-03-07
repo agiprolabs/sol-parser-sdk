@@ -311,6 +311,7 @@ fn parse_create_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         // 将 &str 转换为 String (这是唯一的堆分配)
@@ -483,6 +484,7 @@ fn parse_trade_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         let trade_event = PumpFunTradeEvent {
@@ -577,6 +579,7 @@ fn parse_migrate_event_optimized(
             tx_index,
             block_time_us: block_time_us.unwrap_or(0),
             grpc_recv_us,
+            recent_blockhash: None,
         };
 
         Some(DexEvent::PumpFunMigrate(PumpFunMigrateEvent {
@@ -1000,7 +1003,7 @@ mod tests {
 
         let start = std::time::Instant::now();
         for _ in 0..1000 {
-            let _ = parse_log(log, sig, 0, 0, Some(0), 0, false);
+            let _ = parse_log(log, sig, 0, 0, Some(0), 0, false, None);
         }
         let elapsed = start.elapsed();
 

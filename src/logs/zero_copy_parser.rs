@@ -134,6 +134,7 @@ pub fn parse_pumpfun_trade(
         tx_index,
         block_time_us: block_time_us.unwrap_or(0),
         grpc_recv_us,
+        recent_blockhash: None,
     };
 
     Some(DexEvent::PumpFunTrade(PumpFunTradeEvent {

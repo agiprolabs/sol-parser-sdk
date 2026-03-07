@@ -348,6 +348,7 @@ impl YellowstoneGrpc {
             tx_index: 0,
             block_time_us: block_us,
             grpc_recv_us: grpc_us,
+            recent_blockhash: None,
         };
         if let Some(e) = crate::accounts::parse_account_unified(&data, meta, filter.as_ref()) {
             let _ = queue.push(e);
@@ -467,6 +468,17 @@ fn parse_logs(
     grpc_us: i64,
     filter: Option<&EventTypeFilter>,
 ) -> Vec<DexEvent> {
+    let recent_blockhash = transaction
+        .as_ref()
+        .and_then(|t| t.message.as_ref())
+        .and_then(|m| {
+            if m.recent_blockhash.is_empty() {
+                None
+            } else {
+                Some(m.recent_blockhash.clone())
+            }
+        });
+
     let needs_pumpfun = filter.map(|f| f.includes_pumpfun()).unwrap_or(true);
     let has_create = needs_pumpfun && crate::logs::optimized_matcher::detect_pumpfun_create(logs);
 
@@ -483,7 +495,7 @@ fn parse_logs(
 
         if PROGRAM_DATA_FINDER.find(log.as_bytes()).is_none() { continue; }
 
-        if let Some(mut e) = crate::logs::parse_log(log, sig, slot, tx_idx, block_us, grpc_us, filter, has_create) {
+        if let Some(mut e) = crate::logs::parse_log(log, sig, slot, tx_idx, block_us, grpc_us, filter, has_create, recent_blockhash.as_deref()) {
             crate::core::account_dispatcher::fill_accounts_from_transaction_data(&mut e, meta, transaction, &invokes);
             crate::core::common_filler::fill_data(&mut e, meta, transaction, &invokes);
             result.push(e);

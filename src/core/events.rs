@@ -6,6 +6,7 @@
 use borsh::BorshDeserialize;
 use serde::{Deserialize, Serialize};
 use solana_sdk::{pubkey::Pubkey, signature::Signature};
+use std::sync::Arc;
 
 /// 基础元数据 - 所有事件共享的字段
 #[derive(Debug, Clone, Serialize, Deserialize, Default)]
@@ -15,6 +16,32 @@ pub struct EventMetadata {
     pub tx_index: u64, // 交易在slot中的索引，参考solana-streamer
     pub block_time_us: i64,
     pub grpc_recv_us: i64,
+    /// Transaction's recent blockhash (32 bytes), when available. Arc to avoid per-event clone in hot path.
+    #[serde(
+        serialize_with = "serialize_recent_blockhash",
+        deserialize_with = "deserialize_recent_blockhash",
+        default
+    )]
+    pub recent_blockhash: Option<Arc<Vec<u8>>>,
+}
+
+fn serialize_recent_blockhash<S>(v: &Option<Arc<Vec<u8>>>, s: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    use serde::Serialize;
+    match v {
+        Some(arc) => (**arc).serialize(s),
+        None => s.serialize_none(),
+    }
+}
+
+fn deserialize_recent_blockhash<'de, D>(d: D) -> Result<Option<Arc<Vec<u8>>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let opt: Option<Vec<u8>> = <Option<Vec<u8>> as Deserialize>::deserialize(d)?;
+    Ok(opt.map(Arc::new))
 }
 
 /// Block Meta Event
@@ -1984,6 +2011,7 @@ static DEFAULT_METADATA: Lazy<EventMetadata> = Lazy::new(|| EventMetadata {
     tx_index: 0,
     block_time_us: 0,
     grpc_recv_us: 0,
+    recent_blockhash: None,
 });
 
 impl DexEvent {
@@ -2078,6 +2106,75 @@ impl DexEvent {
 
             // 错误事件 - 返回默认元数据
             DexEvent::Error(_) => &DEFAULT_METADATA,
+        }
+    }
+
+    /// Mutable metadata for filling shared fields (e.g. recent_blockhash). Returns None for Error variant.
+    pub fn metadata_mut(&mut self) -> Option<&mut EventMetadata> {
+        match self {
+            DexEvent::PumpFunCreate(e) => Some(&mut e.metadata),
+            DexEvent::PumpFunCreateV2(e) => Some(&mut e.metadata),
+            DexEvent::PumpFunTrade(e) => Some(&mut e.metadata),
+            DexEvent::PumpFunBuy(e) => Some(&mut e.metadata),
+            DexEvent::PumpFunSell(e) => Some(&mut e.metadata),
+            DexEvent::PumpFunBuyExactSolIn(e) => Some(&mut e.metadata),
+            DexEvent::PumpFunMigrate(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapTrade(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapBuy(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapSell(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapCreatePool(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapLiquidityAdded(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapLiquidityRemoved(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDammV2Swap(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDammV2CreatePosition(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDammV2ClosePosition(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDammV2AddLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDammV2RemoveLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::BonkTrade(e) => Some(&mut e.metadata),
+            DexEvent::BonkPoolCreate(e) => Some(&mut e.metadata),
+            DexEvent::BonkMigrateAmm(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmSwap(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmCreatePool(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmOpenPosition(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmOpenPositionWithTokenExtNft(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmClosePosition(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmIncreaseLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmDecreaseLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumClmmCollectFee(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumCpmmSwap(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumCpmmDeposit(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumCpmmWithdraw(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumCpmmInitialize(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumAmmV4Swap(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumAmmV4Deposit(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumAmmV4Initialize2(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumAmmV4Withdraw(e) => Some(&mut e.metadata),
+            DexEvent::RaydiumAmmV4WithdrawPnl(e) => Some(&mut e.metadata),
+            DexEvent::OrcaWhirlpoolSwap(e) => Some(&mut e.metadata),
+            DexEvent::OrcaWhirlpoolLiquidityIncreased(e) => Some(&mut e.metadata),
+            DexEvent::OrcaWhirlpoolLiquidityDecreased(e) => Some(&mut e.metadata),
+            DexEvent::OrcaWhirlpoolPoolInitialized(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraPoolsSwap(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraPoolsAddLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraPoolsRemoveLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraPoolsBootstrapLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraPoolsPoolCreated(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraPoolsSetPoolFees(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmSwap(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmAddLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmRemoveLiquidity(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmInitializePool(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmInitializeBinArray(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmCreatePosition(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmClosePosition(e) => Some(&mut e.metadata),
+            DexEvent::MeteoraDlmmClaimFee(e) => Some(&mut e.metadata),
+            DexEvent::TokenInfo(e) => Some(&mut e.metadata),
+            DexEvent::TokenAccount(e) => Some(&mut e.metadata),
+            DexEvent::NonceAccount(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapGlobalConfigAccount(e) => Some(&mut e.metadata),
+            DexEvent::PumpSwapPoolAccount(e) => Some(&mut e.metadata),
+            DexEvent::BlockMeta(e) => Some(&mut e.metadata),
+            DexEvent::Error(_) => None,
         }
     }
 }
