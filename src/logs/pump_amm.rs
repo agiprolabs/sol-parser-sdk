@@ -1058,6 +1058,7 @@ mod tests {
             tx_index: 0,
             block_time_us: 0,
             grpc_recv_us: 0,
+            recent_blockhash: None,
         }
     }
 

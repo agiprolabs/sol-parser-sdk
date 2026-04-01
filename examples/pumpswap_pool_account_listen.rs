@@ -68,8 +68,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     }
                     DexEvent::PumpSwapPoolAccount(e) => {
                         println!(
-                            "PumpSwapPoolAccount pubkey={} pool(base_mint={}, quote_mint={})",
-                            e.pubkey, e.pool.base_mint, e.pool.quote_mint
+                            "PumpSwapPoolAccount pubkey={} pool(base_mint={}, quote_mint={}, mayhem={}, cashback={})",
+                            e.pubkey,
+                            e.pool.base_mint,
+                            e.pool.quote_mint,
+                            e.pool.is_mayhem_mode,
+                            e.pool.is_cashback_coin
                         );
                     }
                     _ => {}
