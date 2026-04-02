@@ -1204,6 +1204,8 @@ pub struct PumpSwapPool {
     pub pool_quote_token_account: Pubkey,
     pub lp_supply: u64,
     pub coin_creator: Pubkey,
+    pub is_mayhem_mode: bool,
+    pub is_cashback_coin: bool,
 }
 
 /// PumpFun Bonding Curve Account Event

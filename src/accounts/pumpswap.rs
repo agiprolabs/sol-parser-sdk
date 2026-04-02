@@ -24,7 +24,17 @@ pub mod discriminators {
 pub const GLOBAL_CONFIG_SIZE: usize = 32 + 8 + 8 + 1 + 32 * 8 + 8 + 32;
 
 /// Pool 账户大小常量
-pub const POOL_SIZE: usize = 1 + 2 + 32 * 6 + 8 + 32;
+///
+/// 最新 PumpSwap Pool 结构:
+/// - 1   byte  pool_bump
+/// - 2   bytes index
+/// - 6 * 32    pubkeys
+/// - 8   bytes lp_supply
+/// - 32  bytes coin_creator
+/// - 1   byte  is_mayhem_mode
+/// - 1   byte  is_cashback_coin
+/// - 7   bytes reserved
+pub const POOL_SIZE: usize = 244;
 
 /// 解析 PumpSwap Global Config 账户
 ///
@@ -166,6 +176,12 @@ pub fn parse_pool(account: &AccountData, metadata: EventMetadata) -> Option<DexE
     offset += 8;
 
     let coin_creator = read_pubkey(data, offset)?;
+    offset += 32;
+
+    let is_mayhem_mode = read_u8(data, offset)? != 0;
+    offset += 1;
+
+    let is_cashback_coin = read_u8(data, offset)? != 0;
 
     let pool = PumpSwapPool {
         pool_bump,
@@ -178,6 +194,8 @@ pub fn parse_pool(account: &AccountData, metadata: EventMetadata) -> Option<DexE
         pool_quote_token_account,
         lp_supply,
         coin_creator,
+        is_mayhem_mode,
+        is_cashback_coin,
     };
 
     Some(DexEvent::PumpSwapPoolAccount(PumpSwapPoolAccountEvent {
@@ -199,4 +217,63 @@ pub fn is_global_config_account(data: &[u8]) -> bool {
 /// 检查账户是否是 PumpSwap Pool 账户
 pub fn is_pool_account(data: &[u8]) -> bool {
     has_discriminator(data, discriminators::POOL_ACCOUNT)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use solana_sdk::pubkey::Pubkey;
+
+    #[test]
+    fn parse_pool_reads_mayhem_and_cashback_flags() {
+        let pubkeys = [
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+            Pubkey::new_unique(),
+        ];
+        let mut data = Vec::with_capacity(8 + POOL_SIZE);
+        data.extend_from_slice(discriminators::POOL_ACCOUNT);
+        data.push(7); // pool_bump
+        data.extend_from_slice(&42u16.to_le_bytes()); // index
+        for key in pubkeys {
+            data.extend_from_slice(key.as_ref());
+        }
+        data.extend_from_slice(&123456789u64.to_le_bytes()); // lp_supply
+        let coin_creator = Pubkey::new_unique();
+        data.extend_from_slice(coin_creator.as_ref());
+        data.push(1); // is_mayhem_mode
+        data.push(1); // is_cashback_coin
+        data.extend_from_slice(&[0u8; 7]); // reserved
+
+        let account = AccountData {
+            pubkey: Pubkey::new_unique(),
+            owner: Pubkey::new_unique(),
+            data,
+            executable: false,
+            lamports: 1,
+            rent_epoch: 0,
+        };
+        let metadata = EventMetadata::default();
+
+        let event = parse_pool(&account, metadata).expect("pool account should parse");
+        let DexEvent::PumpSwapPoolAccount(event) = event else {
+            panic!("expected PumpSwapPoolAccount");
+        };
+
+        assert_eq!(event.pool.pool_bump, 7);
+        assert_eq!(event.pool.index, 42);
+        assert_eq!(event.pool.creator, pubkeys[0]);
+        assert_eq!(event.pool.base_mint, pubkeys[1]);
+        assert_eq!(event.pool.quote_mint, pubkeys[2]);
+        assert_eq!(event.pool.lp_mint, pubkeys[3]);
+        assert_eq!(event.pool.pool_base_token_account, pubkeys[4]);
+        assert_eq!(event.pool.pool_quote_token_account, pubkeys[5]);
+        assert_eq!(event.pool.lp_supply, 123456789);
+        assert_eq!(event.pool.coin_creator, coin_creator);
+        assert!(event.pool.is_mayhem_mode);
+        assert!(event.pool.is_cashback_coin);
+    }
 }
