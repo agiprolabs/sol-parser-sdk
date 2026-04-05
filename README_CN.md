@@ -148,6 +148,8 @@ cargo run --example pumpswap_ordered --release
 | `token_decimals_listen` | 订阅 mint 账户（TokenInfo：decimals/supply） | `MINT_ACCOUNT=<pubkey> cargo run --example token_decimals_listen --release` |
 | `pumpswap_pool_account_listen` | 通过 memcmp 订阅 PumpSwap 池账户（如 offset 32 的 mint） | `cargo run --example pumpswap_pool_account_listen --release` |
 | `mint_all_ata_account_listen` | 订阅一个或多个 mint 的全部 ATA（memcmp offset 0） | `cargo run --example mint_all_ata_account_listen --release` |
+| **ShredStream** | | |
+| `shredstream_example` | Jito ShredStream 超低延迟订阅（比 gRPC 快 50-100ms） | `cargo run --example shredstream_example --release` |
 | **工具** | | |
 | `dynamic_subscription` | 运行时更新交易/账户过滤器（无需重连） | `cargo run --example dynamic_subscription --release` |
 | `test_account_filling` | 调试 PumpSwap 账户填充（RPC + 账户解析） | `cargo run --example test_account_filling --release` |
@@ -213,6 +215,58 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+### ShredStream 使用（Jito）
+
+ShredStream 通过直接订阅 Jito 的 ShredStream 服务提供超低延迟（比 gRPC 快约 50-100ms）：
+
+```rust
+use sol_parser_sdk::shredstream::{ShredStreamClient, ShredStreamConfig};
+use sol_parser_sdk::DexEvent;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // 创建 ShredStream 客户端
+    let client = ShredStreamClient::new("http://127.0.0.1:10800").await?;
+
+    // 或使用自定义配置
+    let config = ShredStreamConfig {
+        connection_timeout_ms: 5000,
+        request_timeout_ms: 30000,
+        max_decoding_message_size: 1024 * 1024 * 1024,
+        reconnect_delay_ms: 1000,
+        max_reconnect_attempts: 0, // 0 = 无限重连
+    };
+    let client = ShredStreamClient::new_with_config("http://127.0.0.1:10800", config).await?;
+
+    // 订阅并获取无锁队列
+    let queue = client.subscribe().await?;
+
+    // 消费事件
+    loop {
+        if let Some(event) = queue.pop() {
+            match &event {
+                DexEvent::PumpFunTrade(e) => {
+                    println!("PumpFun Trade: mint={}, is_buy={}", e.mint, e.is_buy);
+                }
+                DexEvent::PumpSwapBuy(e) => {
+                    println!("PumpSwap Buy: pool={}", e.pool);
+                }
+                _ => {}
+            }
+        } else {
+            std::hint::spin_loop();
+        }
+    }
+}
+```
+
+**ShredStream 限制：**
+- 仅 `static_account_keys()` - 使用 ALT 的交易可能有错误的账户
+- 无 Inner Instructions - 无法解析 CPI 调用
+- 无 block_time - 恒为 0
+- tx_index 是 entry 内索引而非 slot 内索引
 
 ---
 
@@ -402,6 +456,10 @@ src/
 │   ├── client.rs          # Yellowstone gRPC 客户端
 │   ├── buffers.rs         # SlotBuffer 和 MicroBatchBuffer
 │   └── types.rs           # OrderMode、ClientConfig、过滤器
+├── shredstream/
+│   ├── client.rs          # Jito ShredStream 客户端
+│   ├── config.rs          # ShredStreamConfig
+│   └── proto/             # Protobuf 定义
 ├── logs/
 │   ├── optimized_matcher.rs  # SIMD 日志检测
 │   ├── zero_copy_parser.rs   # 零拷贝解析

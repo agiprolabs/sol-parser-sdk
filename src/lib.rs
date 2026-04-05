@@ -10,6 +10,9 @@ pub mod warmup; // 预热模块
 // gRPC 模块 - 支持gRPC订阅和过滤
 pub mod grpc;
 
+// ShredStream 模块 - 支持 Jito ShredStream 订阅
+pub mod shredstream;
+
 // RPC 解析模块 - 支持直接从RPC解析交易
 pub mod rpc_parser;
 

@@ -147,6 +147,8 @@ cargo run --example pumpswap_ordered --release
 | `token_decimals_listen` | Subscribe to a mint account (TokenInfo: decimals/supply) | `MINT_ACCOUNT=<pubkey> cargo run --example token_decimals_listen --release` |
 | `pumpswap_pool_account_listen` | Subscribe to PumpSwap pool accounts via memcmp (e.g. mint at offset 32) | `cargo run --example pumpswap_pool_account_listen --release` |
 | `mint_all_ata_account_listen` | Subscribe to all ATAs for one or more mints (memcmp offset 0) | `cargo run --example mint_all_ata_account_listen --release` |
+| **ShredStream** | | |
+| `shredstream_example` | Jito ShredStream ultra-low latency subscription (50-100ms faster than gRPC) | `cargo run --example shredstream_example --release` |
 | **Utility** | | |
 | `dynamic_subscription` | Update transaction/account filters at runtime without reconnecting | `cargo run --example dynamic_subscription --release` |
 | `test_account_filling` | Debug account filling for PumpSwap (RPC + account resolution) | `cargo run --example test_account_filling --release` |
@@ -212,6 +214,58 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 ```
+
+### ShredStream Usage (Jito)
+
+ShredStream provides ultra-low latency (~50-100ms faster than gRPC) by directly subscribing to Jito's ShredStream service:
+
+```rust
+use sol_parser_sdk::shredstream::{ShredStreamClient, ShredStreamConfig};
+use sol_parser_sdk::DexEvent;
+use std::sync::Arc;
+
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    // Create ShredStream client
+    let client = ShredStreamClient::new("http://127.0.0.1:10800").await?;
+
+    // Or with custom config
+    let config = ShredStreamConfig {
+        connection_timeout_ms: 5000,
+        request_timeout_ms: 30000,
+        max_decoding_message_size: 1024 * 1024 * 1024,
+        reconnect_delay_ms: 1000,
+        max_reconnect_attempts: 0, // 0 = infinite reconnect
+    };
+    let client = ShredStreamClient::new_with_config("http://127.0.0.1:10800", config).await?;
+
+    // Subscribe and get lock-free queue
+    let queue = client.subscribe().await?;
+
+    // Consume events
+    loop {
+        if let Some(event) = queue.pop() {
+            match &event {
+                DexEvent::PumpFunTrade(e) => {
+                    println!("PumpFun Trade: mint={}, is_buy={}", e.mint, e.is_buy);
+                }
+                DexEvent::PumpSwapBuy(e) => {
+                    println!("PumpSwap Buy: pool={}", e.pool);
+                }
+                _ => {}
+            }
+        } else {
+            std::hint::spin_loop();
+        }
+    }
+}
+```
+
+**ShredStream Limitations:**
+- Only `static_account_keys()` - transactions using ALT may have incorrect accounts
+- No Inner Instructions - cannot parse CPI calls
+- No block_time - always 0
+- tx_index is entry-level, not slot-level
 
 ---
 
@@ -401,6 +455,10 @@ src/
 │   ├── client.rs          # Yellowstone gRPC client
 │   ├── buffers.rs         # SlotBuffer & MicroBatchBuffer
 │   └── types.rs           # OrderMode, ClientConfig, filters
+├── shredstream/
+│   ├── client.rs          # Jito ShredStream client
+│   ├── config.rs          # ShredStreamConfig
+│   └── proto/             # Protobuf definitions
 ├── logs/
 │   ├── optimized_matcher.rs  # SIMD log detection
 │   ├── zero_copy_parser.rs   # Zero-copy parsing

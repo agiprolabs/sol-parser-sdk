@@ -4188,7 +4188,7 @@ dependencies = [
 
 [[package]]
 name = "sol-parser-sdk"
-version = "0.2.2"
+version = "0.3.0"
 dependencies = [
  "anyhow",
  "arrayref",
@@ -4253,6 +4253,7 @@ dependencies = [
  "tokio-rustls 0.26.2",
  "tokio-stream",
  "tonic",
+ "tonic-prost",
  "tracing",
  "wide",
  "yellowstone-grpc-client",
