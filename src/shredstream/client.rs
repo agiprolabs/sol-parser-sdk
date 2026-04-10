@@ -1,4 +1,8 @@
 //! ShredStream 客户端
+//!
+//! 与 gRPC 客户端类似的实现逻辑：
+//! - 先检测同一笔交易中是否有 CREATE 指令
+//! - 如果有，则该交易的 BUY 事件标记为 is_created_buy
 
 use std::sync::Arc;
 
@@ -9,9 +13,15 @@ use tokio::sync::Mutex;
 use tokio::task::JoinHandle;
 
 use crate::core::now_micros;
+use crate::instr::program_ids::PUMPFUN_PROGRAM_ID;
 use crate::shredstream::config::ShredStreamConfig;
 use crate::shredstream::proto::{Entry, ShredstreamProxyClient, SubscribeEntriesRequest};
 use crate::DexEvent;
+
+/// PumpFun CREATE 指令的 discriminator（前8字节）
+const PUMPFUN_CREATE_DISCRIMINATOR: [u8; 8] = [24, 30, 200, 40, 5, 28, 7, 119];
+/// PumpFun CREATE_V2 指令的 discriminator
+const PUMPFUN_CREATE_V2_DISCRIMINATOR: [u8; 8] = [214, 144, 76, 236, 95, 139, 49, 180];
 
 /// ShredStream 客户端
 #[derive(Clone)]
@@ -141,6 +151,10 @@ impl ShredStreamClient {
     }
 
     /// 处理单个交易
+    ///
+    /// 与 gRPC 实现类似的逻辑：
+    /// 1. 先检测同一笔交易中是否有 PumpFun CREATE 指令
+    /// 2. 如果有，则该交易的 BUY 事件标记为 is_created_buy
     #[inline]
     fn process_transaction(
         transaction: &solana_sdk::transaction::VersionedTransaction,
@@ -156,13 +170,17 @@ impl ShredStreamClient {
         let signature = transaction.signatures[0];
         let accounts: Vec<_> = transaction.message.static_account_keys().to_vec();
 
-        // 解析每个指令
+        // 提取所有指令
         let instructions = Self::extract_instructions(transaction);
 
-        for (ix_index, (program_id_index, instruction_data)) in instructions.iter().enumerate() {
+        // 步骤1: 检测是否有 PumpFun CREATE 指令（与 gRPC 的 detect_pumpfun_create 类似）
+        let has_create = Self::detect_pumpfun_create_instruction(&instructions, &accounts);
+
+        // 步骤2: 解析所有指令
+        for (program_id_index, instruction_data) in instructions.iter() {
             if let Some(&program_id) = accounts.get(*program_id_index as usize) {
                 // 使用指令解析器解析事件
-                if let Some(event) = crate::instr::parse_instruction_unified(
+                if let Some(mut event) = crate::instr::parse_instruction_unified(
                     instruction_data,
                     &accounts,
                     signature,
@@ -173,9 +191,59 @@ impl ShredStreamClient {
                     None, // 无事件类型过滤
                     &program_id,
                 ) {
+                    // 如果检测到 CREATE 指令，标记 BUY 事件为 is_created_buy
+                    if has_create {
+                        Self::mark_created_buy(&mut event);
+                    }
                     let _ = queue.push(event);
                 }
             }
+        }
+    }
+
+    /// 检测同一笔交易中是否有 PumpFun CREATE 指令
+    ///
+    /// 这与 gRPC 的 detect_pumpfun_create(logs) 功能相同，
+    /// 但 ShredStream 只能从指令中检测
+    #[inline]
+    fn detect_pumpfun_create_instruction(
+        instructions: &[(u8, Vec<u8>)],
+        accounts: &[solana_sdk::pubkey::Pubkey],
+    ) -> bool {
+        for (program_id_index, instruction_data) in instructions {
+            // 检查是否是 PumpFun 程序
+            if let Some(&program_id) = accounts.get(*program_id_index as usize) {
+                if program_id == PUMPFUN_PROGRAM_ID && instruction_data.len() >= 8 {
+                    let disc: [u8; 8] = instruction_data[0..8].try_into().unwrap_or([0; 8]);
+                    // 检查是否是 CREATE 或 CREATE_V2
+                    if disc == PUMPFUN_CREATE_DISCRIMINATOR || disc == PUMPFUN_CREATE_V2_DISCRIMINATOR {
+                        return true;
+                    }
+                }
+            }
+        }
+        false
+    }
+
+    /// 标记 BUY 事件为 is_created_buy
+    ///
+    /// 支持所有买入事件类型：
+    /// - DexEvent::PumpFunBuy
+    /// - DexEvent::PumpFunBuyExactSolIn
+    /// - DexEvent::PumpFunTrade (is_buy = true)
+    #[inline]
+    fn mark_created_buy(event: &mut DexEvent) {
+        match event {
+            DexEvent::PumpFunBuy(e) => {
+                e.is_created_buy = true;
+            }
+            DexEvent::PumpFunBuyExactSolIn(e) => {
+                e.is_created_buy = true;
+            }
+            DexEvent::PumpFunTrade(e) if e.is_buy => {
+                e.is_created_buy = true;
+            }
+            _ => {}
         }
     }
 

@@ -1,6 +1,13 @@
 //! PumpFun instruction parser
 //!
 //! Parse PumpFun instructions using discriminator pattern matching
+//!
+//! ## 事件类型映射
+//! - BUY discriminator -> DexEvent::PumpFunBuy
+//! - SELL discriminator -> DexEvent::PumpFunSell
+//! - BUY_EXACT_SOL_IN discriminator -> DexEvent::PumpFunBuyExactSolIn
+//! - CREATE discriminator -> DexEvent::PumpFunCreate
+//! - CREATE_V2 discriminator -> DexEvent::PumpFunCreateV2
 
 use super::program_ids;
 use super::utils::*;
@@ -26,10 +33,25 @@ pub mod discriminators {
 /// PumpFun Program ID
 pub const PROGRAM_ID_PUBKEY: Pubkey = program_ids::PUMPFUN_PROGRAM_ID;
 
+/// 指令类型枚举（用于区分不同的交易指令）
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum PumpFunInstructionType {
+    Buy,
+    Sell,
+    BuyExactSolIn,
+    Create,
+    CreateV2,
+}
+
 /// Main PumpFun instruction parser
 ///
-/// Outer instructions (8-byte discriminator): CREATE, CREATE_V2 从指令解析并返回事件；
-/// BUY/SELL 仍以 log 为主。Inner CPI: MIGRATE_EVENT_LOG 仅在此解析。
+/// Outer instructions (8-byte discriminator):
+/// - CREATE, CREATE_V2: 从指令解析并返回事件
+/// - BUY, BUY_EXACT_SOL_IN, SELL: 从指令解析并返回事件（用于 ShredStream）
+///   - BUY -> DexEvent::PumpFunBuy
+///   - SELL -> DexEvent::PumpFunSell
+///   - BUY_EXACT_SOL_IN -> DexEvent::PumpFunBuyExactSolIn
+/// Inner CPI: MIGRATE_EVENT_LOG 仅在此解析。
 pub fn parse_instruction(
     instruction_data: &[u8],
     accounts: &[Pubkey],
@@ -68,6 +90,44 @@ pub fn parse_instruction(
             grpc_recv_us,
         );
     }
+    // BUY 指令 -> DexEvent::PumpFunBuy
+    if outer_disc == discriminators::BUY {
+        return parse_buy_instruction(
+            data,
+            accounts,
+            signature,
+            slot,
+            tx_index,
+            block_time_us,
+            grpc_recv_us,
+            PumpFunInstructionType::Buy,
+        );
+    }
+    // BUY_EXACT_SOL_IN 指令 -> DexEvent::PumpFunBuyExactSolIn
+    if outer_disc == discriminators::BUY_EXACT_SOL_IN {
+        return parse_buy_instruction(
+            data,
+            accounts,
+            signature,
+            slot,
+            tx_index,
+            block_time_us,
+            grpc_recv_us,
+            PumpFunInstructionType::BuyExactSolIn,
+        );
+    }
+    // SELL 指令 -> DexEvent::PumpFunSell
+    if outer_disc == discriminators::SELL {
+        return parse_sell_instruction(
+            data,
+            accounts,
+            signature,
+            slot,
+            tx_index,
+            block_time_us,
+            grpc_recv_us,
+        );
+    }
 
     // Inner CPI：仅 MIGRATE 在此解析
     if instruction_data.len() >= 16 {
@@ -96,7 +156,10 @@ pub fn parse_instruction(
 /// 10: event_authority, 11: program, 12: global_volume_accumulator,
 /// 13: user_volume_accumulator, 14: fee_config.
 /// remaining_accounts 可能含 bonding_curve_v2 等。
-#[allow(dead_code)]
+///
+/// 返回事件类型:
+/// - PumpFunInstructionType::Buy -> DexEvent::PumpFunBuy
+/// - PumpFunInstructionType::BuyExactSolIn -> DexEvent::PumpFunBuyExactSolIn
 fn parse_buy_instruction(
     data: &[u8],
     accounts: &[Pubkey],
@@ -105,6 +168,7 @@ fn parse_buy_instruction(
     tx_index: u64,
     block_time_us: Option<i64>,
     grpc_recv_us: i64,
+    ix_type: PumpFunInstructionType,
 ) -> Option<DexEvent> {
     if accounts.len() < 7 {
         return None;
@@ -121,7 +185,14 @@ fn parse_buy_instruction(
     let metadata =
         create_metadata(signature, slot, tx_index, block_time_us.unwrap_or_default(), grpc_recv_us);
 
-    Some(DexEvent::PumpFunTrade(PumpFunTradeEvent {
+    // 根据 ix_type 设置 ix_name
+    let ix_name = match ix_type {
+        PumpFunInstructionType::Buy => "buy",
+        PumpFunInstructionType::BuyExactSolIn => "buy_exact_sol_in",
+        _ => "buy",
+    };
+
+    let event = PumpFunTradeEvent {
         metadata,
         mint,
         is_buy: true,
@@ -130,8 +201,16 @@ fn parse_buy_instruction(
         sol_amount,
         token_amount,
         fee_recipient: get_account(accounts, 1).unwrap_or_default(),
+        ix_name: ix_name.to_string(),
         ..Default::default()
-    }))
+    };
+
+    // 根据 ix_type 返回不同的事件类型
+    match ix_type {
+        PumpFunInstructionType::Buy => Some(DexEvent::PumpFunBuy(event)),
+        PumpFunInstructionType::BuyExactSolIn => Some(DexEvent::PumpFunBuyExactSolIn(event)),
+        _ => Some(DexEvent::PumpFunBuy(event)),
+    }
 }
 
 /// Parse sell instruction
@@ -142,7 +221,8 @@ fn parse_buy_instruction(
 /// 7: system_program, 8: creator_vault, 9: token_program,
 /// 10: event_authority, 11: program, 12: fee_config, 13: fee_program.
 /// remaining_accounts 可能含 user_volume_accumulator（返现）、bonding_curve_v2 等。
-#[allow(dead_code)]
+///
+/// 返回事件类型: DexEvent::PumpFunSell
 fn parse_sell_instruction(
     data: &[u8],
     accounts: &[Pubkey],
@@ -167,7 +247,7 @@ fn parse_sell_instruction(
     let metadata =
         create_metadata(signature, slot, tx_index, block_time_us.unwrap_or_default(), grpc_recv_us);
 
-    Some(DexEvent::PumpFunTrade(PumpFunTradeEvent {
+    let event = PumpFunTradeEvent {
         metadata,
         mint,
         is_buy: false,
@@ -176,8 +256,11 @@ fn parse_sell_instruction(
         sol_amount,
         token_amount,
         fee_recipient: get_account(accounts, 1).unwrap_or_default(),
+        ix_name: "sell".to_string(),
         ..Default::default()
-    }))
+    };
+
+    Some(DexEvent::PumpFunSell(event))
 }
 
 /// Parse create instruction (legacy)
