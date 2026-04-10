@@ -1,5 +1,6 @@
 //! ShredStream 客户端
 
+use std::collections::HashSet;
 use std::sync::Arc;
 
 use crossbeam_queue::ArrayQueue;
@@ -223,8 +224,8 @@ impl ShredStreamClient {
             }
         };
 
-        // 检测是否包含 CREATE/CREATE_V2 指令（用于标记 is_created_buy）
-        let has_create = Self::detect_pumpfun_create_instruction(&instructions, accounts);
+        // 检测 CREATE/CREATE_V2 指令创建的 mint 地址（用于精确判断 is_created_buy）
+        let created_mints = Self::detect_pumpfun_create_mints(&instructions, accounts);
 
         // 解析每个指令
         for ix in &instructions {
@@ -241,7 +242,7 @@ impl ShredStreamClient {
                         slot,
                         tx_index,
                         recv_us,
-                        has_create,
+                        &created_mints,
                     ) {
                         events.push(event);
                     }
@@ -250,13 +251,16 @@ impl ShredStreamClient {
         }
     }
 
-    /// 检测交易中是否包含 PumpFun CREATE/CREATE_V2 指令
+    /// 检测交易中 PumpFun CREATE/CREATE_V2 指令创建的 mint 地址
+    /// 返回所有创建的 mint 地址集合（用于精确判断 is_created_buy）
     #[inline]
-    fn detect_pumpfun_create_instruction(
+    fn detect_pumpfun_create_mints(
         instructions: &[IxRef],
-        accounts: &[solana_sdk::pubkey::Pubkey],
-    ) -> bool {
+        accounts: &[Pubkey],
+    ) -> HashSet<Pubkey> {
         use crate::instr::pump::discriminators;
+
+        let mut created_mints = HashSet::new();
 
         for ix in instructions {
             if let Some(program_id) = accounts.get(ix.program_id_index as usize) {
@@ -264,26 +268,31 @@ impl ShredStreamClient {
                     if ix.data.len() >= 8 {
                         let disc: [u8; 8] = ix.data[0..8].try_into().unwrap_or_default();
                         if disc == discriminators::CREATE || disc == discriminators::CREATE_V2 {
-                            return true;
+                            // CREATE/CREATE_V2 指令中 mint 在账户索引 0
+                            if let Some(&mint_idx) = ix.accounts.get(0) {
+                                if let Some(&mint) = accounts.get(mint_idx as usize) {
+                                    created_mints.insert(mint);
+                                }
+                            }
                         }
                     }
                 }
             }
         }
-        false
+        created_mints
     }
 
     /// 解析单个 PumpFun 指令
     #[inline]
     fn parse_pumpfun_instruction(
         data: &[u8],
-        accounts: &[solana_sdk::pubkey::Pubkey],
+        accounts: &[Pubkey],
         ix_accounts: &[u8],
         signature: solana_sdk::signature::Signature,
         slot: u64,
         tx_index: u64,
         recv_us: i64,
-        has_create: bool,
+        created_mints: &HashSet<Pubkey>,
     ) -> Option<DexEvent> {
         use crate::instr::pump::discriminators;
         use crate::instr::utils::*;
@@ -296,7 +305,7 @@ impl ShredStreamClient {
         let ix_data = &data[8..];
 
         // 获取指令中的账户
-        let get_account = |idx: usize| -> Option<solana_sdk::pubkey::Pubkey> {
+        let get_account = |idx: usize| -> Option<Pubkey> {
             ix_accounts.get(idx).and_then(|&i| accounts.get(i as usize)).copied()
         };
 
@@ -312,7 +321,7 @@ impl ShredStreamClient {
             // BUY 指令
             d if d == discriminators::BUY => {
                 Self::parse_buy_instruction(
-                    ix_data, accounts, ix_accounts, signature, slot, tx_index, recv_us, has_create,
+                    ix_data, accounts, ix_accounts, signature, slot, tx_index, recv_us, created_mints,
                 )
             }
             // SELL 指令
@@ -322,7 +331,7 @@ impl ShredStreamClient {
             // BUY_EXACT_SOL_IN 指令
             d if d == discriminators::BUY_EXACT_SOL_IN => {
                 Self::parse_buy_exact_sol_in_instruction(
-                    ix_data, accounts, ix_accounts, signature, slot, tx_index, recv_us, has_create,
+                    ix_data, accounts, ix_accounts, signature, slot, tx_index, recv_us, created_mints,
                 )
             }
             _ => None,
@@ -520,13 +529,13 @@ impl ShredStreamClient {
     #[inline]
     fn parse_buy_instruction(
         data: &[u8],
-        accounts: &[solana_sdk::pubkey::Pubkey],
+        accounts: &[Pubkey],
         ix_accounts: &[u8],
         signature: solana_sdk::signature::Signature,
         slot: u64,
         tx_index: u64,
         recv_us: i64,
-        has_create: bool,
+        created_mints: &HashSet<Pubkey>,
     ) -> Option<DexEvent> {
         use crate::instr::utils::*;
         use crate::core::events::*;
@@ -535,7 +544,7 @@ impl ShredStreamClient {
             return None;
         }
 
-        let get_account = |idx: usize| -> Option<solana_sdk::pubkey::Pubkey> {
+        let get_account = |idx: usize| -> Option<Pubkey> {
             ix_accounts.get(idx).and_then(|&i| accounts.get(i as usize)).copied()
         };
 
@@ -547,6 +556,10 @@ impl ShredStreamClient {
         };
 
         let mint = get_account(2)?;
+        
+        // 🔧 关键修复：只有当 mint 在 created_mints 中时，才标记为 is_created_buy
+        let is_created_buy = created_mints.contains(&mint);
+        
         let metadata = EventMetadata {
             signature,
             slot,
@@ -565,7 +578,7 @@ impl ShredStreamClient {
             token_amount,
             fee_recipient: get_account(1).unwrap_or_default(),
             is_buy: true,
-            is_created_buy: has_create,
+            is_created_buy,
             timestamp: 0,
             virtual_sol_reserves: 0,
             virtual_token_reserves: 0,
@@ -673,13 +686,13 @@ impl ShredStreamClient {
     #[inline]
     fn parse_buy_exact_sol_in_instruction(
         data: &[u8],
-        accounts: &[solana_sdk::pubkey::Pubkey],
+        accounts: &[Pubkey],
         ix_accounts: &[u8],
         signature: solana_sdk::signature::Signature,
         slot: u64,
         tx_index: u64,
         recv_us: i64,
-        has_create: bool,
+        created_mints: &HashSet<Pubkey>,
     ) -> Option<DexEvent> {
         use crate::instr::utils::*;
         use crate::core::events::*;
@@ -688,7 +701,7 @@ impl ShredStreamClient {
             return None;
         }
 
-        let get_account = |idx: usize| -> Option<solana_sdk::pubkey::Pubkey> {
+        let get_account = |idx: usize| -> Option<Pubkey> {
             ix_accounts.get(idx).and_then(|&i| accounts.get(i as usize)).copied()
         };
 
@@ -700,6 +713,10 @@ impl ShredStreamClient {
         };
 
         let mint = get_account(2)?;
+        
+        // 🔧 关键修复：只有当 mint 在 created_mints 中时，才标记为 is_created_buy
+        let is_created_buy = created_mints.contains(&mint);
+        
         let metadata = EventMetadata {
             signature,
             slot,
@@ -718,7 +735,7 @@ impl ShredStreamClient {
             token_amount,
             fee_recipient: get_account(1).unwrap_or_default(),
             is_buy: true,
-            is_created_buy: has_create,
+            is_created_buy,
             timestamp: 0,
             virtual_sol_reserves: 0,
             virtual_token_reserves: 0,
