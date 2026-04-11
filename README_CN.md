@@ -102,13 +102,13 @@ sol-parser-sdk = { path = "../sol-parser-sdk", default-features = false, feature
 
 ```toml
 # 在 Cargo.toml 中添加
-sol-parser-sdk = "0.3.0"
+sol-parser-sdk = "0.3.1"
 ```
 
 或使用零拷贝解析器（最高性能）：
 
 ```toml
-sol-parser-sdk = { version = "0.3.0", default-features = false, features = ["parse-zero-copy"] }
+sol-parser-sdk = { version = "0.3.1", default-features = false, features = ["parse-zero-copy"] }
 ```
 
 ### 性能测试
