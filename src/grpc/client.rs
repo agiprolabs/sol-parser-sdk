@@ -183,6 +183,24 @@ impl YellowstoneGrpc {
                 msg = stream.next() => {
                     match msg {
                         Some(Ok(update)) => {
+                            // Geyser 会周期性下发 ping；必须在同一 subscribe 流上回写 SubscribeRequest.ping，否则公共节点 / LB 可能 RST_STREAM。
+                            if matches!(
+                                update.update_oneof.as_ref(),
+                                Some(subscribe_update::UpdateOneof::Ping(_))
+                            ) {
+                                if let Err(e) = subscribe_tx
+                                    .lock()
+                                    .await
+                                    .send(SubscribeRequest {
+                                        ping: Some(SubscribeRequestPing { id: 1 }),
+                                        ..Default::default()
+                                    })
+                                    .await
+                                {
+                                    return Err(e.to_string());
+                                }
+                                continue;
+                            }
                             self.handle_update(
                                 update, order_mode, event_filter, queue,
                                 &mut slot_buffer, &mut micro_batch, &mut last_slot, batch_us
