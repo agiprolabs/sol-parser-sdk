@@ -105,6 +105,21 @@ pub fn parse_instructions_enhanced(
 
             invokes.entry(pid).or_default().push((outer_idx as i32, j as i32));
 
+            // Raydium CPMM doesn't emit event logs (no Program data:), so CPI calls
+            // have raw instruction data with 8-byte discriminators, not 16-byte event
+            // discriminators. Route to the outer instruction parser with resolved accounts.
+            if pid == crate::grpc::program_ids::RAYDIUM_CPMM_PROGRAM {
+                let accounts: Vec<Pubkey> = inner_ix.accounts.iter()
+                    .filter_map(|&idx| get_key(idx as usize).map(|k| read_pubkey_fast(k)))
+                    .collect();
+                if let Some(event) = crate::instr::raydium_cpmm::parse_instruction(
+                    &inner_ix.data, &accounts, sig, slot, tx_idx, block_us,
+                ) {
+                    result.push((outer_idx, Some(j), event));
+                }
+                continue;
+            }
+
             // 解析 inner instruction（16字节 discriminator）
             if let Some(event) = parse_inner_instruction(
                 &inner_ix.data,
