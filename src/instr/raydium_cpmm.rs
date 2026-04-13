@@ -61,6 +61,15 @@ pub fn parse_instruction(
 }
 
 /// 解析 Base In 交换指令
+///
+/// Account layout (from raydium_cpmm.json IDL):
+/// 0: payer, 1: authority, 2: amm_config, 3: pool_state,
+/// 4: input_token_account, 5: output_token_account,
+/// 6: input_vault, 7: output_vault,
+/// 8: input_token_program, 9: output_token_program,
+/// 10: input_token_mint, 11: output_token_mint, 12: observation_state
+///
+/// Args: amount_in (u64), minimum_amount_out (u64)
 fn parse_swap_base_in_instruction(
     data: &[u8],
     accounts: &[Pubkey],
@@ -69,48 +78,33 @@ fn parse_swap_base_in_instruction(
     tx_index: u64,
     block_time_us: Option<i64>,
 ) -> Option<DexEvent> {
-    let mut offset = 0;
+    if accounts.len() < 12 { return None; }
 
-    let _amount_in = read_u64_le(data, offset)?;
-    offset += 8;
+    let amount_in = read_u64_le(data, 0).unwrap_or(0);
+    let _minimum_amount_out = read_u64_le(data, 8).unwrap_or(0);
 
-    let _minimum_amount_out = read_u64_le(data, offset)?;
+    let pool_state = get_account(accounts, 3).unwrap_or_default();
+    let metadata = create_metadata_simple(signature, slot, tx_index, block_time_us, pool_state);
 
-    let pool = get_account(accounts, 0)?;
-    let metadata = create_metadata_simple(signature, slot, tx_index, block_time_us, pool);
-
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
         metadata,
-
-        // IDL SwapEvent 事件字段 - 从日志填充，这里设置默认值
-        pool_id: Pubkey::default(), // 将从日志填充
-        input_vault_before: 0,      // 将从日志填充
-        output_vault_before: 0,     // 将从日志填充
-        input_amount: 0,            // 将从日志填充
-        output_amount: 0,           // 将从日志填充
-        input_transfer_fee: 0,      // 将从日志填充
-        output_transfer_fee: 0,     // 将从日志填充
+        pool_id: pool_state,
+        input_amount: amount_in,
+        output_amount: 0, // actual output determined post-execution
+        input_vault_before: 0,
+        output_vault_before: 0,
+        input_transfer_fee: 0,
+        output_transfer_fee: 0,
         base_input: true,
-        // 暂时注释，以后会用，AI禁止改动
-        // 指令参数字段
-        // amount_in,
-        // minimum_amount_out,
-
-        // 指令账户字段 - 从account_filler填充
-        // payer: Pubkey::default(),
-        // authority: Pubkey::default(),
-        // amm_config: Pubkey::default(),
-        // pool_state: Pubkey::default(),
-        // input_token_account: Pubkey::default(),
-        // output_token_account: Pubkey::default(),
-        // input_vault: Pubkey::default(),
-        // output_vault: Pubkey::default(),
-        // input_token_mint: Pubkey::default(),
-        // output_token_mint: Pubkey::default(),
+        payer: get_account(accounts, 0).unwrap_or_default(),
+        input_token_mint: get_account(accounts, 10).unwrap_or_default(),
+        output_token_mint: get_account(accounts, 11).unwrap_or_default(),
     }))
 }
 
 /// 解析 Base Out 交换指令
+///
+/// Args: max_amount_in (u64), amount_out (u64)
 fn parse_swap_base_out_instruction(
     data: &[u8],
     accounts: &[Pubkey],
@@ -119,44 +113,27 @@ fn parse_swap_base_out_instruction(
     tx_index: u64,
     block_time_us: Option<i64>,
 ) -> Option<DexEvent> {
-    let mut offset = 0;
+    if accounts.len() < 12 { return None; }
 
-    let _maximum_amount_in = read_u64_le(data, offset)?;
-    offset += 8;
+    let _max_amount_in = read_u64_le(data, 0).unwrap_or(0);
+    let amount_out = read_u64_le(data, 8).unwrap_or(0);
 
-    let _amount_out = read_u64_le(data, offset)?;
+    let pool_state = get_account(accounts, 3).unwrap_or_default();
+    let metadata = create_metadata_simple(signature, slot, tx_index, block_time_us, pool_state);
 
-    let pool = get_account(accounts, 0)?;
-    let metadata = create_metadata_simple(signature, slot, tx_index, block_time_us, pool);
-
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
         metadata,
-
-        // IDL SwapEvent 事件字段 - 从日志填充，这里设置默认值
-        pool_id: Pubkey::default(), // 将从日志填充
-        input_vault_before: 0,      // 将从日志填充
-        output_vault_before: 0,     // 将从日志填充
-        input_amount: 0,            // 将从日志填充
-        output_amount: 0,           // 将从日志填充
-        input_transfer_fee: 0,      // 将从日志填充
-        output_transfer_fee: 0,     // 将从日志填充
+        pool_id: pool_state,
+        input_amount: 0, // actual input determined post-execution
+        output_amount: amount_out,
+        input_vault_before: 0,
+        output_vault_before: 0,
+        input_transfer_fee: 0,
+        output_transfer_fee: 0,
         base_input: false,
-        // 暂时注释，以后会用，AI禁止改动
-        // 指令参数字段
-        // amount_in: maximum_amount_in,
-        // minimum_amount_out: amount_out,
-
-        // 指令账户字段 - 从account_filler填充
-        // payer: Pubkey::default(),
-        // authority: Pubkey::default(),
-        // amm_config: Pubkey::default(),
-        // pool_state: Pubkey::default(),
-        // input_token_account: Pubkey::default(),
-        // output_token_account: Pubkey::default(),
-        // input_vault: Pubkey::default(),
-        // output_vault: Pubkey::default(),
-        // input_token_mint: Pubkey::default(),
-        // output_token_mint: Pubkey::default(),
+        payer: get_account(accounts, 0).unwrap_or_default(),
+        input_token_mint: get_account(accounts, 10).unwrap_or_default(),
+        output_token_mint: get_account(accounts, 11).unwrap_or_default(),
     }))
 }
 
