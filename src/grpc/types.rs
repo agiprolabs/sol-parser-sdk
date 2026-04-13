@@ -260,10 +260,10 @@ pub enum EventType {
     // PumpSwapFeesClaimed,
 
     // Raydium CPMM events
-    // RaydiumCpmmSwap,
-    // RaydiumCpmmDeposit,
-    // RaydiumCpmmWithdraw,
-    // RaydiumCpmmInitialize,
+    RaydiumCpmmSwap,
+    RaydiumCpmmDeposit,
+    RaydiumCpmmWithdraw,
+    RaydiumCpmmInitialize,
 
     // Raydium CLMM events
     // RaydiumClmmSwap,
