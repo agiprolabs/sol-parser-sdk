@@ -113,6 +113,9 @@ pub mod raydium_cpmm {
                 input_transfer_fee: 0,
                 output_transfer_fee: 0,
                 base_input: true,
+                payer: Pubkey::default(),
+                input_token_mint: Pubkey::default(),
+                output_token_mint: Pubkey::default(),
             }))
         }
     }

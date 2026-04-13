@@ -101,7 +101,7 @@ pub fn parse_swap_base_in_from_data(data: &[u8], metadata: EventMetadata) -> Opt
 
     let is_base_input = read_bool(data, offset)?;
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
         pool_id: pool_state,
         input_vault_before: 0,
@@ -136,7 +136,7 @@ pub fn parse_swap_base_out_from_data(data: &[u8], metadata: EventMetadata) -> Op
 
     let is_base_output = read_bool(data, offset)?;
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
         pool_id: pool_state,
         input_vault_before: 0,
@@ -269,7 +269,7 @@ fn parse_swap_base_in_event(
     let metadata =
         create_metadata_simple(signature, slot, tx_index, block_time_us, pool_state, grpc_recv_us);
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
 
         // IDL SwapEvent 事件字段
@@ -331,7 +331,7 @@ fn parse_swap_base_out_event(
     let metadata =
         create_metadata_simple(signature, slot, tx_index, block_time_us, pool_state, grpc_recv_us);
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
 
         // IDL SwapEvent 事件字段
@@ -576,7 +576,7 @@ fn parse_swap_base_in_from_text(
         grpc_recv_us,
     );
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
 
         // IDL SwapEvent 事件字段
@@ -627,7 +627,7 @@ fn parse_swap_base_out_from_text(
         grpc_recv_us,
     );
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
 
         // IDL SwapEvent 事件字段

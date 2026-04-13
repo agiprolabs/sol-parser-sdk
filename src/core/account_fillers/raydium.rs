@@ -173,9 +173,16 @@ pub fn fill_clmm_decrease_liquidity_accounts(
 /// 10: inputTokenMint
 /// 11: outputTokenMint
 /// 12: observationState
-pub fn fill_cpmm_swap_accounts(_e: &mut RaydiumCpmmSwapEvent, _get: &AccountGetter<'_>) {
-    // pool_id, input_amount, output_amount 已从事件数据解析
-    // 其他字段不需要填充
+pub fn fill_cpmm_swap_accounts(e: &mut RaydiumCpmmSwapEvent, get: &AccountGetter<'_>) {
+    if e.payer == Pubkey::default() {
+        e.payer = get(0);
+    }
+    if e.input_token_mint == Pubkey::default() {
+        e.input_token_mint = get(10);
+    }
+    if e.output_token_mint == Pubkey::default() {
+        e.output_token_mint = get(11);
+    }
 }
 
 /// Raydium CPMM Deposit 账户填充

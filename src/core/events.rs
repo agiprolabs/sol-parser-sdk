@@ -576,17 +576,14 @@ pub struct RaydiumCpmmSwapEvent {
     // pub amount_in: u64,
     // pub minimum_amount_out: u64,
 
-    // === 指令账户字段 (暂时注释，以后可能会用到，AI不要删除) ===
-    // pub payer: Pubkey,              // 0: payer
-    // pub authority: Pubkey,          // 1: authority
-    // pub amm_config: Pubkey,         // 2: ammConfig
-    // pub pool_state: Pubkey,         // 3: poolState
-    // pub input_token_account: Pubkey, // 4: inputTokenAccount
-    // pub output_token_account: Pubkey, // 5: outputTokenAccount
-    // pub input_vault: Pubkey,        // 6: inputVault
-    // pub output_vault: Pubkey,       // 7: outputVault
-    // pub input_token_mint: Pubkey,   // 10: inputTokenMint
-    // pub output_token_mint: Pubkey,  // 11: outputTokenMint
+    // === 指令账户字段 ===
+    // Uncommented: payer (user), input/output mints needed for downstream event routing.
+    #[cfg_attr(feature = "parse-borsh", borsh(skip))]
+    pub payer: Pubkey,                  // 0: payer (the user who swapped)
+    #[cfg_attr(feature = "parse-borsh", borsh(skip))]
+    pub input_token_mint: Pubkey,       // 10: inputTokenMint
+    #[cfg_attr(feature = "parse-borsh", borsh(skip))]
+    pub output_token_mint: Pubkey,      // 11: outputTokenMint
 }
 
 /// Raydium CPMM Deposit Event

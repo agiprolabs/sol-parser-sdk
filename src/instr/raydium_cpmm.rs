@@ -79,7 +79,7 @@ fn parse_swap_base_in_instruction(
     let pool = get_account(accounts, 0)?;
     let metadata = create_metadata_simple(signature, slot, tx_index, block_time_us, pool);
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
 
         // IDL SwapEvent 事件字段 - 从日志填充，这里设置默认值
@@ -129,7 +129,7 @@ fn parse_swap_base_out_instruction(
     let pool = get_account(accounts, 0)?;
     let metadata = create_metadata_simple(signature, slot, tx_index, block_time_us, pool);
 
-    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent {
+    Some(DexEvent::RaydiumCpmmSwap(RaydiumCpmmSwapEvent { payer: Pubkey::default(), input_token_mint: Pubkey::default(), output_token_mint: Pubkey::default(),
         metadata,
 
         // IDL SwapEvent 事件字段 - 从日志填充，这里设置默认值
