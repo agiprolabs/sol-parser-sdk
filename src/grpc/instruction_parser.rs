@@ -352,6 +352,10 @@ fn should_parse_instructions(filter: Option<&EventTypeFilter>) -> bool {
                 | MeteoraDammV2CreatePosition
                 | MeteoraDammV2ClosePosition
                 | MeteoraDammV2RemoveLiquidity
+                | RaydiumCpmmSwap
+                | RaydiumCpmmDeposit
+                | RaydiumCpmmWithdraw
+                | RaydiumCpmmInitialize
         )
     })
 }
