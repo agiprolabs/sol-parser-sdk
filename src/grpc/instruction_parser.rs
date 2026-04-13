@@ -105,19 +105,35 @@ pub fn parse_instructions_enhanced(
 
             invokes.entry(pid).or_default().push((outer_idx as i32, j as i32));
 
-            // Raydium CPMM doesn't emit event logs (no Program data:), so CPI calls
-            // have raw instruction data with 8-byte discriminators, not 16-byte event
-            // discriminators. Route to the outer instruction parser with resolved accounts.
-            if pid == crate::grpc::program_ids::RAYDIUM_CPMM_PROGRAM {
-                let accounts: Vec<Pubkey> = inner_ix.accounts.iter()
-                    .filter_map(|&idx| get_key(idx as usize).map(|k| read_pubkey_fast(k)))
-                    .collect();
-                if let Some(event) = crate::instr::raydium_cpmm::parse_instruction(
-                    &inner_ix.data, &accounts, sig, slot, tx_idx, block_us,
-                ) {
-                    result.push((outer_idx, Some(j), event));
+            // Raydium programs don't emit Program data: event logs when called via CPI.
+            // CPI calls have raw instruction data with 8-byte discriminators, not 16-byte
+            // event discriminators. Route to the outer instruction parsers with resolved accounts.
+            {
+                use crate::grpc::program_ids;
+                let is_raydium_cpi =
+                    pid == program_ids::RAYDIUM_CPMM_PROGRAM
+                    || pid == program_ids::RAYDIUM_CLMM_PROGRAM
+                    || pid == program_ids::RAYDIUM_AMM_V4_PROGRAM;
+
+                if is_raydium_cpi {
+                    let accounts: Vec<Pubkey> = inner_ix.accounts.iter()
+                        .filter_map(|&idx| get_key(idx as usize).map(|k| read_pubkey_fast(k)))
+                        .collect();
+                    let event = if pid == program_ids::RAYDIUM_CPMM_PROGRAM {
+                        crate::instr::raydium_cpmm::parse_instruction(
+                            &inner_ix.data, &accounts, sig, slot, tx_idx, block_us)
+                    } else if pid == program_ids::RAYDIUM_CLMM_PROGRAM {
+                        crate::instr::raydium_clmm::parse_instruction(
+                            &inner_ix.data, &accounts, sig, slot, tx_idx, block_us)
+                    } else {
+                        crate::instr::raydium_amm::parse_instruction(
+                            &inner_ix.data, &accounts, sig, slot, tx_idx, block_us)
+                    };
+                    if let Some(event) = event {
+                        result.push((outer_idx, Some(j), event));
+                    }
+                    continue;
                 }
-                continue;
             }
 
             // 解析 inner instruction（16字节 discriminator）
