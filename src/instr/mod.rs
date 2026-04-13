@@ -120,6 +120,19 @@ pub fn parse_instruction_unified(
             grpc_recv_us,
         );
     }
+    // Raydium CPMM — direct invocations (invoke [1]) use 8-byte discriminator.
+    // Most CPMM swaps are direct, not CPI. The inner instruction path (16-byte disc)
+    // handles CPI calls from aggregators like Jupiter.
+    else if *program_id == RAYDIUM_CPMM_PROGRAM_ID {
+        return raydium_cpmm::parse_instruction(
+            instruction_data,
+            accounts,
+            signature,
+            slot,
+            tx_index,
+            block_time_us,
+        );
+    }
 
     None
 }
